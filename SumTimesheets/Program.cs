@@ -22,12 +22,12 @@ internal class Program
     };
     private static void Main(string[] args)
     {
+        // Required by ExcelDataReader for reading .xls files
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
         Dictionary<int, int> hours = GenHourDict();
         Dictionary<int, Dictionary<int, int>> hoursByDay = GenHoursByDayDicts();
         int fileCount = 0;
-
 
         DirectoryInfo timesheetDir = new DirectoryInfo(timesheetsLocation);
         if (timesheetDir.Exists && timesheetDir is not null)
@@ -35,13 +35,16 @@ internal class Program
             DataSet readData;
             DataRowCollection timeCells;
             double readSheetTotal = 0;
+
+            // Iterate over all files in timesheet directory
             foreach (FileInfo f in timesheetDir.GetFiles())
             {
+                fileCount++;
                 using (var stream = File.Open(f.FullName, FileMode.Open, FileAccess.Read))
                 {
                     if (debugCellRead || debugHourCount)
                     {
-                        Console.WriteLine("[" + fileCount + "] | " + f.FullName);
+                        Console.WriteLine("\n[" + fileCount + "] | " + f.Name);
                     }
                     using (var reader = ExcelReaderFactory.CreateReader(stream))
                     {
@@ -81,10 +84,23 @@ internal class Program
                                 },
                                 TransformValue = (IExcelDataReader tableReader, int n, object value) =>
                                 {
-                                    DateTime test = new();
-                                    if (DateTime.TryParse(value?.ToString(), out test))
+                                    DateTime dt = new();
+                                    if (DateTime.TryParse(value?.ToString(), out dt))
                                     {
-                                        return test.TimeOfDay;
+                                        if (n == 8) // if get-out column, read minutes and hours, and seconds as minutes
+                                        {
+                                            DateTime getOutDt = new();
+                                            getOutDt = getOutDt.AddHours(dt.Minute);
+                                            getOutDt = getOutDt.AddMinutes(dt.Second);
+                                            return getOutDt.TimeOfDay;
+                                        }
+
+                                        return dt.TimeOfDay;
+                                    }
+                                    else if (value is null)
+                                    {
+                                        return 0;
+                                        //return new DateTime(0).TimeOfDay;
                                     }
                                     else
                                     {
@@ -94,7 +110,7 @@ internal class Program
                             }
                         });
                         timeCells = readData.Tables[0].Rows;
-                        readSheetTotal = Math.Round((double)timeCells[7][5], 1);
+                        readSheetTotal = Math.Round((double)timeCells[7][5], 1); // Read total number of hours on timesheet (for debug/checking purposes)
                     }
                 }
 
@@ -170,12 +186,17 @@ internal class Program
             Console.Write(indToDay[r] + ":");
             for (int c = 0; c < 9; c++)
             {
-                Console.Write(" " + cells[r][c]);
+                Console.Write(" " + cells[r][c].ToString().PadLeft(8));
             }
             Console.WriteLine();
         }
     }
 
+    /// <summary>
+    /// Returns the full path of directory containing timesheets to be processed.
+    /// Default is in a root level folder "Excel"
+    /// </summary>
+    /// <returns>The path to the timesheets folder.</returns>
     private static string GetTimesheetDirPath()
     {
         string workingDir = Environment.CurrentDirectory;
@@ -183,6 +204,10 @@ internal class Program
         return projDir + "\\Excel";
     }
 
+    /// <summary>
+    /// Generates a fresh dictionary for each hour of the day.
+    /// </summary>
+    /// <returns>A fresh dictionary with 24 entries.</returns>
     private static Dictionary<int, int> GenHourDict()
     {
         Dictionary<int, int> h = new Dictionary<int, int>();
@@ -195,6 +220,10 @@ internal class Program
         return h;
     }
 
+    /// <summary>
+    /// Generates a fresh dictionary of dictionaries for each hour of each day.
+    /// </summary>
+    /// <returns>A fresh dictionary with 7 entries, each containing a fresh dictionary of 24 entries.</returns>
     private static Dictionary<int, Dictionary<int, int>> GenHoursByDayDicts()
     {
         Dictionary<int, Dictionary<int, int>> d = new Dictionary<int, Dictionary<int, int>>();
