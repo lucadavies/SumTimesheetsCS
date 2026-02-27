@@ -25,8 +25,8 @@ internal class Program
         // Required by ExcelDataReader for reading .xls files
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
-        Dictionary<int, int> hours = GenHourDict();
-        Dictionary<int, Dictionary<int, int>> hoursByDay = GenHoursByDayDicts();
+        Dictionary<int, double> hours = GenHourDict();
+        Dictionary<int, Dictionary<int, double>> hoursByDay = GenHoursByDayDicts();
         int fileCount = 0;
 
         DirectoryInfo timesheetDir = new DirectoryInfo(timesheetsLocation);
@@ -97,11 +97,11 @@ internal class Program
 
                                         return dt.TimeOfDay;
                                     }
-                                    else if (value is null)
-                                    {
-                                        return 0;
-                                        //return new DateTime(0).TimeOfDay;
-                                    }
+                                    //else if (value is null)
+                                    //{
+                                    //    return 0;
+                                    //    //return new DateTime(0).TimeOfDay;
+                                    //}
                                     else
                                     {
                                         return value;
@@ -118,16 +118,16 @@ internal class Program
                 {
                     PrintCells(timeCells);
                 }
-                //CountWorkedHours(hours, hoursByDay, timeCells, readSheetTotal);
+                CountWorkedHours(hours, hoursByDay, timeCells, readSheetTotal);
             }
         }
     }
 
-    private static void CountWorkedHours(Dictionary<int, int> hours, Dictionary<int, Dictionary<int, int>> hoursByDay, DataRowCollection cells, int readSheetTotal)
+    private static void CountWorkedHours(Dictionary<int, double> hours, Dictionary<int, Dictionary<int, double>> hoursByDay, DataRowCollection cells, double readSheetTotal)
     {
-        int timeSheetHours = 0;
-        int startTime;
-        int endTime;
+        double timesheetHours = 0;
+        double startTime;
+        double endTime;
 
         for (int day = 0; day < 7; day++)
         {
@@ -140,11 +140,103 @@ internal class Program
             for (int shift = 0; shift < 8; shift += 2)
             {
                 // Check shift has both start AND end time
-                //if (cells[day][shift] != 0) && (cells[day][shift + 1] != 0)
-                //{
+                if ((cells[day][shift] is not DBNull) && (cells[day][shift + 1] is not DBNull))
+                {
+                    startTime = ((TimeSpan)cells[day][shift]).Hours + Math.Round((double)(((TimeSpan)cells[day][shift]).Minutes / 60), 2);
+                    endTime = ((TimeSpan)cells[day][shift + 1]).Hours + Math.Round((double)(((TimeSpan)cells[day][shift + 1]).Minutes / 60), 2);
 
-                //}
-                //startTime = cells[day][shift] != 0) && 
+                    // Account for a shift finishing at midnight (00:00:00)
+                    if (Math.Truncate(endTime) == 0)
+                    {
+                        endTime += 24;
+                    }
+
+                    // For each hour spanned by the shift, add one to relevant hour
+                    for (int hr = (int)startTime; hr < (int)endTime; hr++)
+                    {
+                        hours[hr] += 1;
+                        hoursByDay[day][hr] += 1;
+                        timesheetHours += 1;
+                    }
+
+                    // If start time was not on-the-hour, subtract part-hour from total time
+                    if (startTime % 1 > 0)
+                    {
+                        hours[(int)startTime] -= startTime % 1;
+                        hoursByDay[day][(int)startTime] -= startTime % 1;
+                        timesheetHours -= startTime % 1;
+                    }
+
+                    // If end time was not on-the-hour, add part-hour to total time
+                    if (endTime % 1 > 0)
+                    {
+                        hours[(int)endTime] += endTime % 1;
+                        hoursByDay[day][(int)endTime] -= endTime % 1;
+                        timesheetHours -= endTime % 1;
+                    }
+
+                    if (debugHourCount)
+                    {
+                        Console.Write(endTime - startTime + " ");
+                    }
+                }
+            }
+
+            // Count get-outs. Takes start time from end of evening/night shift (whichever is later, if one exists), or else assumes 10pm
+            // If there's a get-out at all
+            if (cells[day][8] is not DBNull && ((TimeSpan)cells[day][8]).Hours != 0)
+            {
+                startTime = 22;
+
+
+                if (cells[day][7] is not DBNull) // If night shift exists...
+                {
+                    startTime = ((TimeSpan)cells[day][7]).Hours + Math.Round((double)((TimeSpan)cells[day][7]).Minutes / 60, 2);
+                }
+                else if (cells[day][5] is not DBNull) // then if evening shift exists...
+                {
+                    startTime = ((TimeSpan)cells[day][5]).Hours + Math.Round((double)((TimeSpan)cells[day][5]).Minutes / 60, 2);
+                }
+                else // no evening/night shift, assume get-out starts at 10pm
+                {
+                    startTime = 22;
+                }
+
+                endTime = startTime + ((TimeSpan)cells[day][8]).Hours + Math.Round((double)((TimeSpan)cells[day][8]).Minutes / 60, 2);
+
+                // For each hour spanned by the shift, add one to relevant hour
+                for (int hr = (int)startTime; hr < (int)endTime; hr++)
+                {
+                    hours[hr % 24] += 1;
+                    hoursByDay[(day + (hr / 24)) % 7][hr % 24] += 1;
+                    timesheetHours += 1;
+                }
+
+                // If start time was not on-the-hour, subtract part-hour from total time (roll over hour to next day as needed)
+                if (startTime % 1 > 0)
+                {
+                    hours[(int)startTime % 24] -= startTime % 1;
+                    hoursByDay[(day + ((int)startTime / 24)) % 7][(int)startTime] -= startTime % 1;
+                    timesheetHours -= startTime % 1;
+                }
+
+                // If end time was not on-the-hour, add part-hour to total time (roll ove hour to next day as needed)
+                if (endTime % 1 > 0)
+                {
+                    hours[(int)endTime % 24] += endTime % 1;
+                    hoursByDay[(day + ((int)endTime / 24)) % 7][(int)endTime] += endTime % 1;
+                    timesheetHours += endTime % 1;
+                }
+
+                if (debugHourCount)
+                {
+                    Console.Write("GO: " + (endTime - startTime));
+                }
+            }
+
+            if (debugHourCount)
+            {
+                Console.WriteLine();
             }
         }
     }
@@ -186,7 +278,7 @@ internal class Program
             Console.Write(indToDay[r] + ":");
             for (int c = 0; c < 9; c++)
             {
-                Console.Write(" " + cells[r][c].ToString().PadLeft(8));
+                Console.Write(" " + cells[r][c].ToString()?.PadLeft(8));
             }
             Console.WriteLine();
         }
@@ -208,9 +300,9 @@ internal class Program
     /// Generates a fresh dictionary for each hour of the day.
     /// </summary>
     /// <returns>A fresh dictionary with 24 entries.</returns>
-    private static Dictionary<int, int> GenHourDict()
+    private static Dictionary<int, double> GenHourDict()
     {
-        Dictionary<int, int> h = new Dictionary<int, int>();
+        Dictionary<int, double> h = new Dictionary<int, double>();
 
         for (int hour = 0; hour < 24; hour++)
         {
@@ -224,9 +316,9 @@ internal class Program
     /// Generates a fresh dictionary of dictionaries for each hour of each day.
     /// </summary>
     /// <returns>A fresh dictionary with 7 entries, each containing a fresh dictionary of 24 entries.</returns>
-    private static Dictionary<int, Dictionary<int, int>> GenHoursByDayDicts()
+    private static Dictionary<int, Dictionary<int, double>> GenHoursByDayDicts()
     {
-        Dictionary<int, Dictionary<int, int>> d = new Dictionary<int, Dictionary<int, int>>();
+        Dictionary<int, Dictionary<int, double>> d = new Dictionary<int, Dictionary<int, double>>();
         
         for (int day = 0; day < 7; day++)
         {
