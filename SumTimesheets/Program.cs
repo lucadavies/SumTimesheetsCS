@@ -6,6 +6,7 @@ using System.Text;
 
 internal class Program
 {
+    private static readonly double actualHours = 6785.3 - 716.75; // Total hours less holiday entitlement
     private static bool debugCellRead = true;
     private static bool debugHourCount = true;
     private static bool showByDay = false;
@@ -112,8 +113,18 @@ internal class Program
                 if (debugCellRead)
                 {
                     PrintCells(timeCells);
+                    Console.WriteLine();
                 }
                 CountWorkedHours(hours, hoursByDay, timeCells, readSheetTotal);
+            }
+
+            double countedHours = SumHours(hours);
+            double countError = Math.Round(countedHours - actualHours, 1);
+            double countErrorPercent = Math.Round(((countedHours - actualHours) / actualHours) * 100, 1);
+            if (debugHourCount)
+            {
+                Console.WriteLine("Total counted hours: " + countedHours + " | Actual: " + actualHours + " (Error: " + countError + " | " + countErrorPercent + "%");
+                Console.WriteLine();
             }
         }
     }
@@ -234,6 +245,16 @@ internal class Program
                 Console.WriteLine();
             }
         }
+        
+        if (debugHourCount)
+        {
+            Console.WriteLine("Counted: " + timesheetHours + " | Actual: " + readSheetTotal);
+        }
+    }
+
+    private static double SumHours(Dictionary<int, double> hours)
+    {
+        return hours.Values.Sum();
     }
 
     private static void PrintCells(DataSet cells)
