@@ -85,7 +85,7 @@ internal class Program
                                 TransformValue = (IExcelDataReader tableReader, int n, object value) =>
                                 {
                                     DateTime dt = new();
-                                    if (DateTime.TryParse(value?.ToString(), out dt))
+                                    if (value is not double && DateTime.TryParse(value?.ToString(), out dt))
                                     {
                                         if (n == 8) // if get-out column, read minutes and hours, and seconds as minutes
                                         {
@@ -97,11 +97,6 @@ internal class Program
 
                                         return dt.TimeOfDay;
                                     }
-                                    //else if (value is null)
-                                    //{
-                                    //    return 0;
-                                    //    //return new DateTime(0).TimeOfDay;
-                                    //}
                                     else
                                     {
                                         return value;
@@ -216,7 +211,7 @@ internal class Program
                 if (startTime % 1 > 0)
                 {
                     hours[(int)startTime % 24] -= startTime % 1;
-                    hoursByDay[(day + ((int)startTime / 24)) % 7][(int)startTime] -= startTime % 1;
+                    hoursByDay[(day + ((int)startTime / 24)) % 7][(int)startTime % 24] -= startTime % 1;
                     timesheetHours -= startTime % 1;
                 }
 
@@ -224,7 +219,7 @@ internal class Program
                 if (endTime % 1 > 0)
                 {
                     hours[(int)endTime % 24] += endTime % 1;
-                    hoursByDay[(day + ((int)endTime / 24)) % 7][(int)endTime] += endTime % 1;
+                    hoursByDay[(day + ((int)endTime / 24)) % 7][(int)endTime % 24] += endTime % 1;
                     timesheetHours += endTime % 1;
                 }
 
