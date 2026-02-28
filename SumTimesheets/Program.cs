@@ -1,6 +1,6 @@
-﻿using DynamicObj;
-using ExcelDataReader;
+﻿using ExcelDataReader;
 using Plotly.NET;
+using Plotly.NET.LayoutObjects;
 using System.Data;
 using System.Text;
 
@@ -135,6 +135,8 @@ internal class Program
                 Console.WriteLine("Total counted hours: " + countedHours + " | Read: " + readTotal+ " (Error: " + countError + " | " + countErrorPercent + "%)");
                 Console.WriteLine();
             }
+
+            ShowFigure(hours, hoursByDay, fileCount);
         }
     }
 
@@ -268,6 +270,46 @@ internal class Program
     private static double SumHours(Dictionary<int, double> hours)
     {
         return hours.Values.Sum();
+    }
+
+    private static void ShowFigure(Dictionary<int, double> hours, Dictionary<int, Dictionary<int, double>> hoursByDay, int weekCount)
+    {
+        if (!showByDay)
+        {
+            List<double> vals = [..hours.Values];
+            List<string> keys = [..hours.Keys.Select(k => k.ToString().PadLeft(2, '0') + ":00")];
+
+            LinearAxis xAxis = new LinearAxis();
+            xAxis.SetValue("title", "Hour");
+            xAxis.SetValue("showgrid", false);
+            xAxis.SetValue("showline", true);
+
+            LinearAxis yAxis = new LinearAxis();
+            yAxis.SetValue("title", "Frequency");
+            yAxis.SetValue("showgrid", false);
+            yAxis.SetValue("showline", true);
+
+            Layout layout = new Layout();
+            layout.SetValue("xaxis", xAxis);
+            layout.SetValue("yaxis", yAxis);
+            layout.SetValue("showlegend", true);
+
+            Trace trace = new Trace("bar");
+            trace.SetValue("x", keys);
+            trace.SetValue("y", vals);
+            trace.SetValue("mode", "markers");
+            trace.SetValue("name", "Hours worked and (over " + weekCount + " weeks)");
+
+            GenericChart
+                .ofTraceObject(true, trace)
+                .WithLayout(layout)
+                .Show();
+
+        }
+        else
+        {
+
+        }
     }
 
     private static void PrintCells(DataRowCollection cells)
