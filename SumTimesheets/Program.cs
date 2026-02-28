@@ -36,10 +36,17 @@ internal class Program
             DataSet readData;
             DataRowCollection timeCells;
             double readSheetTotal = 0;
+            double readTotal = 0;
 
             // Iterate over all files in timesheet directory
             foreach (FileInfo f in timesheetDir.GetFiles())
             {
+                // Skip non-Excel files
+                if (f.Extension != ".xlsx")
+                {
+                    continue;
+                }
+
                 fileCount++;
                 using (var stream = File.Open(f.FullName, FileMode.Open, FileAccess.Read))
                 {
@@ -88,13 +95,13 @@ internal class Program
                                     DateTime dt = new();
                                     if (value is not double && DateTime.TryParse(value?.ToString(), out dt))
                                     {
-                                        if (n == 8) // if get-out column, read minutes and hours, and seconds as minutes
-                                        {
-                                            DateTime getOutDt = new();
-                                            getOutDt = getOutDt.AddHours(dt.Minute);
-                                            getOutDt = getOutDt.AddMinutes(dt.Second);
-                                            return getOutDt.TimeOfDay;
-                                        }
+                                        //if (n == 8) // if get-out column, read minutes and hours, and seconds as minutes
+                                        //{
+                                        //    DateTime getOutDt = new();
+                                        //    getOutDt = getOutDt.AddHours(dt.Minute);
+                                        //    getOutDt = getOutDt.AddMinutes(dt.Second);
+                                        //    return getOutDt.TimeOfDay;
+                                        //}
 
                                         return dt.TimeOfDay;
                                     }
@@ -116,14 +123,16 @@ internal class Program
                     Console.WriteLine();
                 }
                 CountWorkedHours(hours, hoursByDay, timeCells, readSheetTotal);
+                readTotal += readSheetTotal;
             }
 
             double countedHours = SumHours(hours);
-            double countError = Math.Round(countedHours - actualHours, 1);
-            double countErrorPercent = Math.Round(((countedHours - actualHours) / actualHours) * 100, 1);
+            double countError = Math.Round(countedHours - readTotal, 1);
+            double countErrorPercent = Math.Round(((countedHours - readTotal) / readTotal) * 100, 1);
             if (debugHourCount)
             {
-                Console.WriteLine("Total counted hours: " + countedHours + " | Actual: " + actualHours + " (Error: " + countError + " | " + countErrorPercent + "%");
+                //Console.WriteLine("Total counted hours: " + countedHours + " | Actual: " + actualHours + " (Error: " + countError + " | " + countErrorPercent + "%");
+                Console.WriteLine("Total counted hours: " + countedHours + " | Read: " + readTotal+ " (Error: " + countError + " | " + countErrorPercent + "%)");
                 Console.WriteLine();
             }
         }
@@ -148,8 +157,8 @@ internal class Program
                 // Check shift has both start AND end time
                 if ((cells[day][shift] is not DBNull) && (cells[day][shift + 1] is not DBNull))
                 {
-                    startTime = ((TimeSpan)cells[day][shift]).Hours + Math.Round((double)(((TimeSpan)cells[day][shift]).Minutes / 60), 2);
-                    endTime = ((TimeSpan)cells[day][shift + 1]).Hours + Math.Round((double)(((TimeSpan)cells[day][shift + 1]).Minutes / 60), 2);
+                    startTime = ((TimeSpan)cells[day][shift]).Hours + Math.Round((double)(((TimeSpan)cells[day][shift]).Minutes) / 60, 2);
+                    endTime = ((TimeSpan)cells[day][shift + 1]).Hours + Math.Round((double)(((TimeSpan)cells[day][shift + 1]).Minutes) / 60, 2);
 
                     // Account for a shift finishing at midnight (00:00:00)
                     if (Math.Truncate(endTime) == 0)
@@ -177,8 +186,8 @@ internal class Program
                     if (endTime % 1 > 0)
                     {
                         hours[(int)endTime] += endTime % 1;
-                        hoursByDay[day][(int)endTime] -= endTime % 1;
-                        timesheetHours -= endTime % 1;
+                        hoursByDay[day][(int)endTime] += endTime % 1;
+                        timesheetHours += endTime % 1;
                     }
 
                     if (debugHourCount)
@@ -197,18 +206,18 @@ internal class Program
 
                 if (cells[day][7] is not DBNull) // If night shift exists...
                 {
-                    startTime = ((TimeSpan)cells[day][7]).Hours + Math.Round((double)((TimeSpan)cells[day][7]).Minutes / 60, 2);
+                    startTime = ((TimeSpan)cells[day][7]).Hours + Math.Round((double)(((TimeSpan)cells[day][7]).Minutes) / 60, 2);
                 }
                 else if (cells[day][5] is not DBNull) // then if evening shift exists...
                 {
-                    startTime = ((TimeSpan)cells[day][5]).Hours + Math.Round((double)((TimeSpan)cells[day][5]).Minutes / 60, 2);
+                    startTime = ((TimeSpan)cells[day][5]).Hours + Math.Round((double)(((TimeSpan)cells[day][5]).Minutes) / 60, 2);
                 }
                 else // no evening/night shift, assume get-out starts at 10pm
                 {
                     startTime = 22;
                 }
 
-                endTime = startTime + ((TimeSpan)cells[day][8]).Hours + Math.Round((double)((TimeSpan)cells[day][8]).Minutes / 60, 2);
+                endTime = startTime + ((TimeSpan)cells[day][8]).Hours + Math.Round((double)(((TimeSpan)cells[day][8]).Minutes) / 60, 2);
 
                 // For each hour spanned by the shift, add one to relevant hour
                 for (int hr = (int)startTime; hr < (int)endTime; hr++)
@@ -249,42 +258,16 @@ internal class Program
         if (debugHourCount)
         {
             Console.WriteLine("Counted: " + timesheetHours + " | Actual: " + readSheetTotal);
+            if (Math.Abs(timesheetHours - readSheetTotal) > 0.00001)
+            {
+                Console.WriteLine("COUNT ERROR");
+            }
         }
     }
 
     private static double SumHours(Dictionary<int, double> hours)
     {
         return hours.Values.Sum();
-    }
-
-    private static void PrintCells(DataSet cells)
-    {
-        DateTime getOutAdjusted;
-        for (int row = 0; row < indToDay.Count; row++)
-        {
-            Console.Write(indToDay[row] + " ");
-            for (int col = 0; col < 13; col++)
-            {
-                getOutAdjusted = new();
-                var val = cells.Tables[0].Rows[row][col];
-                if (val is DateTime dt)
-                {
-                    Console.Write(dt.TimeOfDay + " ");  
-                }
-                else if (col == 12)
-                {
-                    // TODO This is absolutley rank. Fix it.
-                    getOutAdjusted = getOutAdjusted.AddHours(((TimeSpan)val).Minutes);
-                    getOutAdjusted = getOutAdjusted.AddMinutes(((TimeSpan)val).Seconds);
-                    Console.Write(getOutAdjusted.TimeOfDay + " ");
-                }
-                else
-                {
-                    Console.Write(val?.ToString() + " ");
-                }                
-            }
-            Console.WriteLine();
-        }
     }
 
     private static void PrintCells(DataRowCollection cells)
